@@ -6,31 +6,70 @@
 
 This repository contains the source code of CobaltStrike's Beacon, which is ready to use out of the box. I purchased this from China's Xianyu trading platform.
 
-### Why Share This?
-
-I've decided to make this public because I'm tired of seeing people profiting from selling Beacon source code in various forms. While this repository might face DMCA takedown in the future, I believe that when a whale falls, it creates life - everyone should have the opportunity to learn.
-
-I despise the behavior of certain individuals who have been shamelessly profiting from this for years. It's time to end this cycle.
-
-### Dependencies
-
-To use this source code, you'll need to:
-1. Prepare [LibTomMath](https://github.com/libtom/libtommath)
-2. Prepare [LibTomCrypt](https://github.com/libtom/libtomcrypt)
-3. Decompile the jar file yourself
-4. Replace the DLL files accordingly
-
-### Purpose
-
-I hope this can:
-1. Provide reference for more open-source C2 projects
-2. Promote the maturity of more open-source projects
-3. Help improve AV/EDR detection capabilities
-4. Contribute to overall cybersecurity
-
-This is dedicated to both red and blue teams.
+> **Note:** This branch is a cross-compiled version for **macOS**. For the Windows version, please check the [Windows branch](https://github.com/kyxiaxiang/CobaltStrikeBeaconCppSource).  
+> This repository contains a ready-to-use **Cobalt Strike Beacon DLL** source code, purchased from the Chinese Xianyu trading platform.  
+> Special thanks to the original author [@kyxiaxiang](https://github.com/kyxiaxiang) for the selfless contribution.
 
 ---
+
+## 📜 Source
+
+In 2022, the source code of the **Cobalt Strike 4.5 Beacon DLL** suddenly began circulating in underground Telegram channels.  
+It was later sold at high prices—up to **3,500 RMB**—on Chinese second-hand platforms.  
+
+This commercialized leak not only reflects the **strong demand for red team tools** but also exposes the risks of **weaponizing closed-source security software**.  
+
+Now, with parts of the Beacon code made public, the security community finally has the opportunity to analyze its key techniques at the source level—such as:
+
+- Thread injection
+- Sleep obfuscation
+- C2 communications
+
+This marks a milestone for both **enhancing blue team detection capabilities** and **advancing the evolution of red team tools**.
+
+---
+
+## ❓ Why Share? *(Original Author’s Words)*
+
+> I decided to make this source code public because I’m tired of seeing people indirectly selling the Beacon source code in various ways for profit.  
+> While this repository may eventually face a **DMCA takedown**, I believe that *when a whale falls, all creatures thrive* — everyone should have the chance to learn.  
+>   
+> I despise the shameless, repetitive cash-grabbing behavior some people have engaged in over the years. It’s time to end this cycle.
+
+---
+
+## 📦 Dependencies
+
+Using this source code requires:
+
+1. [LibTomMath](https://github.com/libtom/libtommath)
+2. [LibTomCrypt](https://github.com/libtom/libtomcrypt)
+3. Manually decompile the JAR file
+4. Replace the DLL file accordingly
+
+> **Note:** Related dependency installation and compilation scripts can be executed in one step.  
+> See [`install_lib.sh`](./install_lib.sh) for details.
+
+---
+
+## 🎯 Purpose
+
+I hope this code can:
+
+1. Provide reference and suggestions for more open-source C2 projects
+2. Promote the maturity of more open-source projects
+3. Help improve AV/EDR detection capabilities
+4. Contribute to cybersecurity
+
+💡 Dedicated to all **red** and **blue** teams.
+
+---
+
+## ⚠️ Disclaimer / 免责声明
+
+**This code is for educational and research purposes only.**  
+The author assumes no responsibility for any misuse.
+
 # 声明：这个仓库随时会被DMCA TAKEDOWN，请尽快Clone. 
 # due to the nature of this repository, it may be subject to DMCA takedown at any time. Please clone it as soon as possible.
 ## Chinese
