@@ -1,7 +1,22 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <winsock2.h>
-#include <windows.h>
+#ifdef _WIN32
+  #define WIN32_LEAN_AND_MEAN
+  #define _WINSOCK_DEPRECATED_NO_WARNINGS
+  #include <winsock2.h>
+  #include <ws2tcpip.h>
+  #include <windows.h>
+#else
+  /* 如果在非 Windows 平台误编译，给出最小兼容定义，避免 VS Code 本机解析报错 */
+  #include <sys/types.h>
+  #include <sys/socket.h>
+  #include <arpa/inet.h>
+  #include <netdb.h>
+  typedef int SOCKET;              /* Windows 风格别名 */
+  #ifndef INVALID_SOCKET
+  #define INVALID_SOCKET (-1)
+  #endif
+#endif
+
+#include "auth_guard.h"
 
 void http_init(char * host, int port, char * ua);
 void http_close();

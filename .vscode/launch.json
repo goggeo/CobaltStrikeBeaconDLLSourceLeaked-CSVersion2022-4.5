@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-mac",
+      "type": "shell",
+      "command": "clang++",
+      "args": [
+        "-std=c++17",
+        "-O2",
+        "-Wall",
+        "${workspaceFolder}/src/beacon.cpp",
+        "-I", "${workspaceFolder}/src",
+        "-I", "${workspaceFolder}/include",
+        "-I", "/opt/homebrew/Cellar/mingw-w64/*/toolchain-x86_64/x86_64-w64-mingw32/include",
+        "-o", "${workspaceFolder}/build/app_mac"
+      ],
+      "group": { "kind": "build" },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "build-win-cross",
+      "type": "shell",
+      "command": "/opt/homebrew/bin/x86_64-w64-mingw32-g++",
+      "args": [
+        "-std=c++17",
+        "-O2",
+        "-Wall",
+        "${workspaceFolder}/src/beacon.cpp",
+        "-I", "${workspaceFolder}/src",
+        "-I", "${workspaceFolder}/include",
+        "-I", "/opt/homebrew/Cellar/mingw-w64/*/toolchain-x86_64/x86_64-w64-mingw32/include",
+        "-o", "${workspaceFolder}/build/app_win.exe",
+        "-lws2_32"
+      ],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$gcc"]
+    }
+  ]
+}

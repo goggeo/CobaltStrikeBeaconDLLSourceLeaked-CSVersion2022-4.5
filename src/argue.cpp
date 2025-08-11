@@ -6,7 +6,7 @@
 #include "bformat.h"
 #include "commands.h"
 #include "argue.h"
-
+#include "auth_guard.h"
 typedef struct {
 	BOOL      active;
 	char      command[8192];

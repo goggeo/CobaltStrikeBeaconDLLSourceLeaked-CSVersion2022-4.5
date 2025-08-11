@@ -1,0 +1,8 @@
+{
+    "workbench.colorCustomizations": {
+        "minimap.background": "#272334FF",
+        "scrollbar.shadow": "#272334FF"
+    },
+    "C_Cpp.errorSquiggles": "disabled",
+    "C_Cpp.dimInactiveRegions": false
+}
