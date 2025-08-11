@@ -1,0 +1,48 @@
+# Prerequisites
+*.d
+src/auth_guard
+src/refkectiveLoader.5k
+src/refkectiveLoader.50k
+src/refkectiveLoader.100k
+src/refkectiveLoader.1000k
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Linker files
+*.ilk
+
+# Debugger Files
+*.pdb
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# debug information files
+*.dwo
+src/auth_guard
+src/auth_guard
+.vscode

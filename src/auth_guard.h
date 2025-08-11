@@ -1,4 +1,4 @@
-// auth_guard.h
+// auth_guard.h-在macOS下交叉编译必要的头文件，包含了Windows和Linux的授权守卫逻辑和必要的头文件定义
 // 全局授权/安全模式守卫 —— 默认关闭高危功能，除非满足“编译期 + 运行期”双重授权。
 // 使用方式：在各高危函数入口加 REQUIRE_AUTH_* 宏（见文末示例）
 
@@ -11,7 +11,7 @@
 #ifndef AUTHORIZED_BUILD
   #define SAFE_MODE 1
 #else
-  #define SAFE_MODE 0
+  #define SAFE_MODE 0 #不允许高危操作
 #endif
 
 // ==== 依赖声明 ====
