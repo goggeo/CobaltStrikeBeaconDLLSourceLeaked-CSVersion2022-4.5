@@ -1,4 +1,4 @@
-# CobaltStrike Beacon Source Code / CobaltStrike Beacon 源代码
+# CobaltStrike Beacon Source Code  / CobaltStrike Beacon 源代码 （正在改进，实现现代化免杀，模块改进）
 
 [English](#english) | [中文](#chinese)
 
