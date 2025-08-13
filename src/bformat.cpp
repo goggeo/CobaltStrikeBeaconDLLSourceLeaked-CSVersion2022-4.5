@@ -86,12 +86,12 @@ DWORD bformat_length(formatp * buffer) {
 }
 
 char * bformat_tostring(formatp * buffer, int * size) {
-	DWORD len = bformat_length(buffer);
-	if (size != NULL)
-		*size = (int)len;
+    DWORD len = bformat_length(buffer);
+    if (size != NULL)
+        *size = (int)len;
 
-	if (size == 0)
-		return NULL;
+    if (len == 0)
+        return NULL;
 
-	return bformat_string(buffer);
+    return bformat_string(buffer);
 }
