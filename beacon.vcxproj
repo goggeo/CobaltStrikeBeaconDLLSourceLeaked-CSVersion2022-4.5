@@ -110,6 +110,9 @@
     <None Include="src\ReflectiveLoader.50k" />
     <None Include="src\ReflectiveLoader.5k" />
     <ClInclude Include="src\auth_guard.h" />
+    <ClCompile Include="Release|x64\tokens_dll.cpp" />
+    <ClInclude Include="Release|x64\tokens.h" />
+    <Content Include="Release|x64\CMakeList.txt" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{3A371EBD-EEE1-4B2A-88B9-93E7BABE0949}</ProjectGuid>

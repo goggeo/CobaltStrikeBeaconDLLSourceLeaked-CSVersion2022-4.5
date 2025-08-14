@@ -4,5 +4,16 @@
         "scrollbar.shadow": "#272334FF"
     },
     "C_Cpp.errorSquiggles": "disabled",
-    "C_Cpp.dimInactiveRegions": false
+    "C_Cpp.dimInactiveRegions": false,
+    "C_Cpp.default.compilerPath": "/opt/homebrew/bin/x86_64-w64-mingw32-g++",
+    "C_Cpp.default.intelliSenseMode": "gcc-x64",
+    "C_Cpp.default.defines": [
+      "_WIN32",
+      "_WIN64",
+      "UNICODE",
+      "_UNICODE",
+      "WINVER=0x0A00",
+      "_WIN32_WINNT=0x0A00"
+    ],
+    "C_Cpp.intelliSenseEngineFallback": "Enabled"
 }

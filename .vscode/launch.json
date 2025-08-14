@@ -1,5 +1,37 @@
 {
-  "version": "2.0.0",
+  // Debug/Run configurations live here (launch.json) and
+  // tasks are temporarily kept here as well for continuity.
+  // Recommended: move "tasks" below into .vscode/tasks.json later.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Mac Debug (lldb)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/app_mac",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build-mac",
+      "stopOnEntry": false,
+      "console": "integratedTerminal",
+      "env": {}
+    },
+    {
+      "name": "Windows x64 (Wine) Run",
+      "type": "lldb",
+      "request": "launch",
+      "program": "wine64",
+      "args": ["${workspaceFolder}/build/app_win.exe"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build-win-cross",
+      "stopOnEntry": false,
+      "console": "integratedTerminal"
+    }
+  ],
+
+  // ===== TEMP: Keep tasks here so your existing labels still work with preLaunchTask. =====
+  // VS Code ignores unknown properties, but will *not* read tasks from launch.json.
+  // After you create .vscode/tasks.json, remove this "tasks" block from this file.
   "tasks": [
     {
       "label": "build-mac",
@@ -8,11 +40,11 @@
       "args": [
         "-std=c++17",
         "-O2",
+        "-g",
         "-Wall",
         "${workspaceFolder}/src/beacon.cpp",
         "-I", "${workspaceFolder}/src",
         "-I", "${workspaceFolder}/include",
-        "-I", "/opt/homebrew/Cellar/mingw-w64/*/toolchain-x86_64/x86_64-w64-mingw32/include",
         "-o", "${workspaceFolder}/build/app_mac"
       ],
       "group": { "kind": "build" },
@@ -25,12 +57,16 @@
       "args": [
         "-std=c++17",
         "-O2",
+        "-g",
         "-Wall",
         "${workspaceFolder}/src/beacon.cpp",
         "-I", "${workspaceFolder}/src",
         "-I", "${workspaceFolder}/include",
-        "-I", "/opt/homebrew/Cellar/mingw-w64/*/toolchain-x86_64/x86_64-w64-mingw32/include",
         "-o", "${workspaceFolder}/build/app_win.exe",
+        "-static",
+        "-static-libgcc",
+        "-static-libstdc++",
+        "-s",
         "-lws2_32"
       ],
       "group": { "kind": "build", "isDefault": true },

@@ -1,15 +1,16 @@
 /*
  *  Token Stealing Source
  */ 
-#include <windows.h>
+#include "auth_guard.h"
 #include <stdio.h>
-#include <tlhelp32.h>
 #include "tokens.h"
 #include "tasks.h"
 #include "commands.h"
 #include "beacon.h"
 #include "parse.h"
-#include <WinSock2.h>
+#include <winsock2.h>
+#include <windows.h>
+#include <tlhelp32.h>
 #include "ReflectiveLoader.h"
 #include <winternl.h>
 

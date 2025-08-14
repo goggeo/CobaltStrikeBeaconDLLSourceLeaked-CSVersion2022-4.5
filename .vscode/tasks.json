@@ -1,9 +1,61 @@
 {
+    "version": "2.0.0",
     "tasks": [
         {
+            "label": "build-mac",
+            "type": "shell",
+            "command": "clang++",
+            "args": [
+                "-std=c++17",
+                "-O2",
+                "-g",
+                "-Wall",
+                "${workspaceFolder}/src/beacon.cpp",
+                "-I",
+                "${workspaceFolder}/src",
+                "-I",
+                "${workspaceFolder}/include",
+                "-o",
+                "${workspaceFolder}/build/app_mac"
+            ],
+            "group": {
+                "kind": "build"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "build-win-cross",
+            "type": "shell",
+            "command": "/opt/homebrew/bin/x86_64-w64-mingw32-g++",
+            "args": [
+                "-std=c++17",
+                "-O2",
+                "-g",
+                "-Wall",
+                "${workspaceFolder}/src/beacon.cpp",
+                "-I",
+                "${workspaceFolder}/src",
+                "-I",
+                "${workspaceFolder}/include",
+                "-o",
+                "${workspaceFolder}/build/app_win.exe",
+                "-static",
+                "-static-libgcc",
+                "-static-libstdc++",
+                "-s",
+                "-lws2_32"
+            ],
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
             "type": "cppbuild",
-            "label": "C/C++: clang 生成活动文件",
-            "command": "/usr/bin/clang",
+            "label": "C/C++: clang++ 生成活动文件",
+            "command": "/usr/bin/clang++",
             "args": [
                 "-fcolor-diagnostics",
                 "-fansi-escape-codes",
@@ -24,6 +76,5 @@
             },
             "detail": "调试器生成的任务。"
         }
-    ],
-    "version": "2.0.0"
+    ]
 }
