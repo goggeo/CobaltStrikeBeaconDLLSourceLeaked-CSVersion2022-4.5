@@ -1,10 +1,6 @@
 # Prerequisites
 *.d
 src/auth_guard
-src/refkectiveLoader.5k
-src/refkectiveLoader.50k
-src/refkectiveLoader.100k
-src/refkectiveLoader.1000k
 # Compiled Object files
 *.slo
 *.lo
