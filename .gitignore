@@ -45,3 +45,4 @@ src/auth_guard
 .vscode/launch.json
 .vscode/settings.json
 .vscode/tasks.json
+.vscode/c_cpp_properties.json
