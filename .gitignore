@@ -49,3 +49,6 @@ src/auth_guard
 build/CMakeFiles/4.0.2/CMakeDetermineCompilerABI_CXX.bin
 build/CMakeFiles/cmake.check_cache
 .gitignore
+Releasex64/CMakeFiles/4.0.2/CMakeDetermineCompilerABI_CXX.bin
+.gitignore
+Releasex64/CMakeFiles/cmake.check_cache
