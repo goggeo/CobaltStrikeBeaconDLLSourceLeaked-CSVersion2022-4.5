@@ -13,7 +13,7 @@ src/auth_guard
 
 # Linker files
 *.ilk
-
+.DS_Store
 # Debugger Files
 *.pdb
 
@@ -46,3 +46,6 @@ src/auth_guard
 .vscode/settings.json
 .vscode/tasks.json
 .vscode/c_cpp_properties.json
+build/CMakeFiles/4.0.2/CMakeDetermineCompilerABI_CXX.bin
+build/CMakeFiles/cmake.check_cache
+.gitignore

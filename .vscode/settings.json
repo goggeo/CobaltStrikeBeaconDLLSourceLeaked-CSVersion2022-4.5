@@ -15,5 +15,6 @@
       "WINVER=0x0A00",
       "_WIN32_WINNT=0x0A00"
     ],
-    "C_Cpp.intelliSenseEngineFallback": "Enabled"
+    "C_Cpp.intelliSenseEngineFallback": "Enabled",
+    "cmake.sourceDirectory": "/Users/a1/Cyberarsenel/CobaltStrikeBeaconCppSource/Releasex64"
 }
