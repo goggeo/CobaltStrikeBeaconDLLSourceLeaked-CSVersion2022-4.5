@@ -1,5 +1,5 @@
 # CobaltStrike Beacon Source Code  / CobaltStrike Beacon 源代码 （正在改进，实现现代化免杀，模块改进）
-
+# [原仓库](https://github.com/kyxiaxiang/CobaltStrikeBeaconCppSource)已被DMCA TAKEDOWN.
 [English](#english) | [中文](#chinese)
 
 ## English
