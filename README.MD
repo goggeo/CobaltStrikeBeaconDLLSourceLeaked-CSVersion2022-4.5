@@ -2,6 +2,7 @@
 # CobaltStrike Beacon 源代码 
 正在改进，实现现代化免杀，模块改进，低调使用，避免DMCATAKEDOWN。
 # [原仓库](https://github.com/kyxiaxiang/CobaltStrikeBeaconCppSource)已被DMCA TAKEDOWN.  
+# 在此感谢原作者[@kyxiaxiang](https://github.com/kyxiaxiang)的无私贡献。
 对于需要原版源码的人，你可以clone第一版commit:<details><summary>点击展示Clone命令行</summary><pre><code>git clone https://github.com/Basyaact/CobaltStrikeBeaconDLLSourceLeaked-CSVersion2022-4.5.git && cd CobaltStrikeBeaconDLLSourceLeaked-CSVersion2022-4.5 && git checkout $(git rev-list --max-parents=0 HEAD)</code></pre></details>![DMCA TAKEDOWN](https://github.com/Basyaact/CobaltStrikeBeaconDLLSourceLeaked-CSVersion2022-4.5/blob/main/DMCA2025-08-1615.51.48.png).
 
 [English](#english) | [中文](#chinese)
